@@ -1,0 +1,37 @@
+# Scrape Ray head + worker metrics (port 8080) with Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ray-workers-monitor
+  namespace: ray-system
+  labels:
+    release: prometheus
+spec:
+  jobLabel: ray-workers
+  namespaceSelector:
+    matchNames: [ray-system]
+  selector:
+    matchLabels:
+      ray.io/is-ray-node: "yes"
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s
+---
+# Alert when the autoscaler is pinned at maxReplicas
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kuberay-alerts
+  namespace: ray-system
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: kuberay
+      rules:
+        - alert: RayClusterAtMaxScale
+          expr: count(ray_node_cpu_count{ray_io_node_type="worker"}) >= 8
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Ray worker group has been at maxReplicas for 15m - raise the limit or add capacity"

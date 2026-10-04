@@ -1,0 +1,80 @@
+# RayService: Ray Serve application with zero-downtime blue/green upgrades.
+# Changing serveConfigV2 updates apps in place; changing rayClusterConfig triggers
+# a NewCluster upgrade (new cluster warmed up, then traffic switched).
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: ray-serve-l4
+  namespace: ray-system
+spec:
+  upgradeStrategy:
+    type: NewCluster
+  serviceUnhealthySecondThreshold: 900
+  deploymentUnhealthySecondThreshold: 300
+  serveConfigV2: |
+    applications:
+      - name: predictor
+        import_path: workloads.serve_app:app
+        route_prefix: /
+        runtime_env:
+          working_dir: "https://github.com/Pradeeptalari14/tp-kuberay/archive/refs/heads/main.zip"
+        deployments:
+          - name: Predictor
+            autoscaling_config:
+              min_replicas: 1
+              max_replicas: 4
+              target_ongoing_requests: 8
+            ray_actor_options:
+              num_gpus: 1
+  rayClusterConfig:
+    rayVersion: "2.41.0"
+    enableInTreeAutoscaling: true
+    gcsFaultToleranceOptions:
+      redisAddress: "redis.ray-system.svc.cluster.local:6379"
+      redisPassword:
+        valueFrom:
+          secretKeyRef:
+            name: ray-redis-auth
+            key: password
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-cpus: "0"
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray:2.41.0-py311
+              env:
+                - name: RAY_enable_autoscaler_v2
+                  value: "1"
+              ports:
+                - { containerPort: 6379, name: gcs-server }
+                - { containerPort: 8265, name: dashboard }
+                - { containerPort: 10001, name: client }
+                - { containerPort: 8080, name: metrics }
+                - { containerPort: 8000, name: serve }
+              resources:
+                requests: { cpu: "2", memory: 8Gi }
+                limits: { cpu: "2", memory: 8Gi }
+    workerGroupSpecs:
+      - groupName: gpu-l4-workers
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 4
+        rayStartParams: {}
+        template:
+          spec:
+            restartPolicy: Never
+            nodeSelector:
+              cloud.google.com/gke-accelerator: nvidia-l4
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            containers:
+              - name: ray-worker
+                image: rayproject/ray:2.41.0-py311-gpu
+                resources:
+                  requests: { cpu: "4", memory: 24Gi, nvidia.com/gpu: 1 }
+                  limits: { cpu: "4", memory: 24Gi, nvidia.com/gpu: 1 }

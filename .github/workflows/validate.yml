@@ -1,0 +1,47 @@
+name: KubeRay CI Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile workloads/*.py
+
+      - name: Verify pinned container images
+        run: |
+          if grep -rn "image:.*:latest" manifests/; then
+            echo "Floating :latest tag detected!"
+            exit 1
+          fi
+          echo "Images verified."
+
+      - name: Set up kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: kuberay-ci
+
+      - name: Install KubeRay Operator via Helm
+        run: |
+          bash scripts/install-operator.sh
+
+      - name: Server-side dry-run validation
+        run: |
+          kubectl apply --dry-run=server -f manifests/redis-gcs-ft.yaml
+          kubectl apply --dry-run=server -f manifests/raycluster.yaml
+          kubectl apply --dry-run=server -f manifests/rayjob.yaml
+          kubectl apply --dry-run=server -f manifests/rayservice.yaml

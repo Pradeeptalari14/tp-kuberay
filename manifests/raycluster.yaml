@@ -1,0 +1,70 @@
+# Long-lived interactive RayCluster with an autoscaling A100 worker group.
+# Requires: KubeRay operator >= v1.3.0, manifests/redis-gcs-ft.yaml applied first.
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-cluster-a100
+  namespace: ray-system
+spec:
+  rayVersion: "2.41.0"
+  enableInTreeAutoscaling: true
+  autoscalerOptions:
+    upscalingMode: Default
+    idleTimeoutSeconds: 120
+    resources:
+      requests: { cpu: "500m", memory: 512Mi }
+      limits: { cpu: "500m", memory: 512Mi }
+  gcsFaultToleranceOptions:
+    redisAddress: "redis.ray-system.svc.cluster.local:6379"
+    redisPassword:
+      valueFrom:
+        secretKeyRef:
+          name: ray-redis-auth
+          key: password
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      num-cpus: "0"          # keep workloads off the head pod
+    template:
+      spec:
+        containers:
+          - name: ray-head
+            image: rayproject/ray:2.41.0-py311
+            env:
+              - name: RAY_enable_autoscaler_v2
+                value: "1"
+            ports:
+              - { containerPort: 6379, name: gcs-server }
+              - { containerPort: 8265, name: dashboard }
+              - { containerPort: 10001, name: client }
+              - { containerPort: 8080, name: metrics }
+            resources:
+              requests: { cpu: "2", memory: 8Gi }
+              limits: { cpu: "2", memory: 8Gi }
+  workerGroupSpecs:
+    - groupName: gpu-a100-workers
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 8
+      rayStartParams: {}
+      template:
+        spec:
+          restartPolicy: Never   # required by autoscaler v2
+          nodeSelector:
+            cloud.google.com/gke-accelerator: nvidia-tesla-a100
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - name: ray-worker
+              image: rayproject/ray:2.41.0-py311-gpu
+              resources:
+                requests:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: 1
+                limits:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: 1

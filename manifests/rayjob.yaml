@@ -1,0 +1,65 @@
+# Batch RayJob: spins up a cluster, runs Ray Train, then deletes the cluster.
+# The workload is fetched from this repo via runtimeEnv working_dir.
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: ray-train-a100
+  namespace: ray-system
+spec:
+  entrypoint: python workloads/train_job.py
+  submissionMode: K8sJobMode
+  shutdownAfterJobFinishes: true   # release GPUs as soon as the job ends
+  ttlSecondsAfterFinished: 300
+  activeDeadlineSeconds: 14400     # hard stop after 4h
+  backoffLimit: 2
+  runtimeEnvYAML: |
+    working_dir: "https://github.com/Pradeeptalari14/tp-kuberay/archive/refs/heads/main.zip"
+    env_vars:
+      NUM_WORKERS: "4"
+  rayClusterSpec:
+    rayVersion: "2.41.0"
+    enableInTreeAutoscaling: true
+    autoscalerOptions:
+      upscalingMode: Default
+      idleTimeoutSeconds: 60
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-cpus: "0"
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray:2.41.0-py311
+              env:
+                - name: RAY_enable_autoscaler_v2
+                  value: "1"
+              ports:
+                - { containerPort: 6379, name: gcs-server }
+                - { containerPort: 8265, name: dashboard }
+                - { containerPort: 10001, name: client }
+                - { containerPort: 8080, name: metrics }
+              resources:
+                requests: { cpu: "2", memory: 8Gi }
+                limits: { cpu: "2", memory: 8Gi }
+    workerGroupSpecs:
+      - groupName: gpu-a100-workers
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 4
+        rayStartParams: {}
+        template:
+          spec:
+            restartPolicy: Never
+            nodeSelector:
+              cloud.google.com/gke-accelerator: nvidia-tesla-a100
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            containers:
+              - name: ray-worker
+                image: rayproject/ray:2.41.0-py311-gpu
+                resources:
+                  requests: { cpu: "8", memory: 64Gi, nvidia.com/gpu: 1 }
+                  limits: { cpu: "8", memory: 64Gi, nvidia.com/gpu: 1 }

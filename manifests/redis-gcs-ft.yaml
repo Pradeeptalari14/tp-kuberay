@@ -1,0 +1,79 @@
+# Redis backing store for Ray GCS fault tolerance.
+# With this in place the Ray head pod can crash/restart and the cluster keeps its
+# actors, jobs and placement groups. Apply BEFORE the Ray manifests.
+#
+# PRODUCTION: replace the inline password with External Secrets / Vault and use a
+# managed HA Redis (Memorystore, ElastiCache, Azure Cache) instead of this Deployment.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ray-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ray-redis-auth
+  namespace: ray-system
+type: Opaque
+stringData:
+  password: change-me
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: ray-system
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          args: ["--requirepass", "$(REDIS_PASSWORD)", "--appendonly", "yes"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ray-redis-auth
+                  key: password
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests: { cpu: "250m", memory: 512Mi }
+            limits: { cpu: "500m", memory: 512Mi }
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}   # use a PVC in production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ray-system
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
