@@ -1,0 +1,20 @@
+# Python & Node artifacts
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+dist/
+build/
+
+# Secrets & Environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+tmp/
+temp/
