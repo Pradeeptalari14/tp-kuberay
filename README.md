@@ -1,3 +1,6 @@
+[![Ecosystem](https://img.shields.io/badge/Portfolio%20Ecosystem-341%20Studios-6366f1.svg)](https://pradeeptalari.me/projects/)
+[![Architecture DAG](https://img.shields.io/badge/Architecture-DAG%20%26%20Course-10b981.svg)](https://pradeeptalari.me/tools/repo-learning/)
+
 # ☸️ KubeRay Operator Studio: Enterprise Ray on Kubernetes
 
 [![CI SRE Validation](https://github.com/Pradeeptalari14/tp-kuberay/actions/workflows/validate.yml/badge.svg)](https://github.com/Pradeeptalari14/tp-kuberay/actions)
@@ -212,3 +215,6 @@ tp-kuberay/
 
 - **License:** [MIT License](LICENSE)
 - **Attribution:** Maintained by **[Talari Pradeep](https://talaripradeep.info/)** · AI Infrastructure & Platform SRE Lead
+
+---
+*Synchronized with [KubeRay Operator Studio Studio](https://pradeeptalari.me/tools/kuberay/) & [Repository Learning DAG](https://pradeeptalari.me/tools/repo-learning/) — [Talari Pradeep Portfolio](https://pradeeptalari.me)*
